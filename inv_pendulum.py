@@ -120,12 +120,12 @@ class env:
             dist = getDist(x, child)
         # check in bound
         if not isinbound(self.boundary, child): 
-            return True, dist
+            return True
         # check collision with obb
         for i in self.OBB:
             if lineOBB(x, child, dist, i):
-                return True, dist
-        return False, dist
+                return True
+        return False
         
 if __name__ == "__main__":
     Env = env()
