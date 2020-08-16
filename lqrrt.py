@@ -27,6 +27,7 @@ class lqrrt:
         self.gamma = 1
         self.LQR = lqr()
         self.COST = {}
+        self.STAGECOST = {}
 
     def LinearizedMotionModel(self, x, u):
         # x: tuple state
@@ -37,27 +38,24 @@ class lqrrt:
         return tuple(A@x + B@u)
         # define A(x0,u0), B(x0,u0), Q, R here
 
-    def getDist(self, x1, x2):
-        # determined by the model and environemnt, assume work in 3D env
-        return np.sqrt((x1[0] - x2[0])**2 + (x1[1] - x2[1])**2 + (x1[2] - x2[2])**2)
-
     def collisionFree(self, x1):
         x2 = (0,0,0) # center of the inverted pendulum
         pos1, pos2 = x1[0:3], x2[0:3] # still tuple
-        collide = self.env.isCollide(pos1, pos2, dist = self.env.r)
+        collide = self.env.isCollide(pos1, pos2, dist = self.env.inv_pen.r)
         return collide
 
 ##################################### LQR RRT star implementation    
     def LQR_rrt_star(self):
         xrand = self.env.sampleFree()
         xnearest = self.LQRNearest(self.V, xrand)
-        xnew = self.LQRsteer(xnearest, xrand)
+        xnew, pi = self.LQRsteer(xnearest, xrand)
         Xnear = self.LQRNear(self.V, xnew)
         xmin, sig_min = self.ChooseParent(Xnear, xnew)
         collide = self.collisionFree(sig_min)
         if not collide:
             self.X.add(xnew)
             self.E.add((xmin, xnew))
+            self.Parent[xnew] = xmin
             self.V, self.E = self.rewire(self.V, self.E, Xnear, xnew)
 
     def ChooseParent(self, Xnear, xrand):
@@ -65,7 +63,7 @@ class lqrrt:
         xmin = None
         sig_min = None
         for xnear in Xnear:
-            sigma = self.LQRsteer(xnear, xrand)
+            sigma, pi = self.LQRsteer(xnear, xrand)
             newcost = self.cost(xnear) + self.cost(sigma)
             if newcost < minCost:
                 minCost, xmin = newcost, xnear
@@ -108,18 +106,22 @@ class lqrrt:
         # using the local LQR policy calculated by linearizing about x.
         pi = self.LQR.lqr_policy(x, x_p) # numpy array of policies
         sigma = self.LinearizedMotionModel(x, pi)
-        return sigma
+        return sigma, pi
 
     def cost(self, x):
         # returns the cost in the rrt
-        if x == self.x0:
+        if x == self.env.start:
             return 0
         if x not in self.COST:
             if x not in self.Parent:
                 self.COST[x] = np.inf
             else:
-                self.COST[x] = self.cost(self.Parent[x]) + self.getDist(self.Parent[x], x)
+                S, K = self.LQR.get_sol(x) # TODO: verify if it is at xparent or x.
+                diff = np.array(self.Parent[x]) - np.array(x)
+                LQRcost = diff.T@S@diff # (v-x)TS(v-s)
+                self.COST[x] = self.cost(self.Parent[x]) + LQRcost
         return self.COST[x]
+
         
 
 

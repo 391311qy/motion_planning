@@ -8,14 +8,6 @@ import scipy
 # Q: Q
 # R: R in J = sum: 0-> inf (xTQx + uTRu)
 
-def riccattiSolve(A, B, Q, R):
-    # solving ricatti equation efficiently in continuous time
-    # ATS + SA - SB(R-1)BTS + Q = 0, or
-    # ATS + SA - (SB + N)(R-1)(BTS + NT) + Q = 0, 
-    invR = np.linalg.inv(R)
-    Z1, Z2, Z3, Z4  = A, - B@invR@B.T, -Q, -A.T
-    Z = np.vstack((np.row_stack((Z1, Z2)), np.row_stack((Z3, Z4))))
-
 class lqr:
 
     def __init__(self):
@@ -39,6 +31,7 @@ class lqr:
         return S, K
 
     def get_sol(self, x):
+        # get the stored solution of CARE
         if x not in self.S_set:
             Q, R = self.Q, self.R
             A, B = self.Linearized_Motion_Model(x, 0)

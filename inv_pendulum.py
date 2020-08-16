@@ -83,25 +83,42 @@ class obb(object):
         self.O = O
         self.T = np.vstack([np.column_stack([self.O.T,-self.O.T@self.P]),[0,0,0,1]])
 
+
+class inv_pendulum(object):
+
+    def __init__(self):
+        self.m = 0.2 #kg mass of the pendulum
+        self.r = 3
+
+    def motionmodel(self):
+        # Gives A and B
+        pass
+
+    def costmodel(self):
+        # gives Q and R
+        pass
+
 class env:
 
     def __init__(self, xmin=-10, ymin=-10, zmin=-10, xmax=10, ymax=10, zmax=10):
         self.boundary = np.array([xmin, ymin, zmin, xmax, ymax, zmax]) 
         self.OBB = np.array([obb([0.0,0.0,-5.0],[1.0,1.0,1.0],R_matrix(135,0,0)),
                              obb([3.0,3.0,3.0],[0.5,2.0,2.5],R_matrix(45,0,0))])
-        #self.start = np.array()
-        #self.goal = np.array()
-        self.r = 3
+        self.inv_pen = inv_pendulum()
+        self.goal = (0,0,self.inv_pen.r,0,0,0)
+        self.start = (0,0,-self.inv_pen.r, 0.1, 0.2, 0.1)
 
     def sampleFree(self):
         # unitball
+        # state include position (x1, x2, x3)
+        # angular velocities (v1, v2, v3)
         u = np.random.uniform()
         v = np.random.uniform()
         theta = 2 * np.pi * u
         phi = np.arccos(2*v - 1)
-        x = self.r * np.sin(theta) * np.cos(phi)
-        y = self.r * np.sin(theta) * np.sin(phi)
-        z = self.r * np.cos(theta)
+        x = self.inv_pen.r * np.sin(theta) * np.cos(phi)
+        y = self.inv_pen.r * np.sin(theta) * np.sin(phi)
+        z = self.inv_pen.r * np.cos(theta)
         state = tuple([x, y, z] + list(np.random.uniform(size=3)))
         if self.isinobs(state):
             return self.sampleFree()
