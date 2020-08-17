@@ -1,12 +1,13 @@
 import numpy as np
 import numpy.linalg as npl
-import scipy
+import scipy.linalg as la
 
 # solve the riccatti equation given following matrix inputs
 # A: df(x, u)/dx
 # B: df(x, u)/du
 # Q: Q
 # R: R in J = sum: 0-> inf (xTQx + uTRu)
+from quadrotor import Quadrotor
 
 class lqr:
 
@@ -15,18 +16,23 @@ class lqr:
         self.S_set = {}
         self.K_set = {}
         self.Q, self.R = self.Continuous_Cost_Model()
+        self.quad = Quadrotor()
 
     def Linearized_Motion_Model(self, x0, u0):
         # return A(x0, u0), B(x0, u0)
+        A = self.quad.linearized_A(x0, u0)
+        B = self.quad.linearized_B(x0, u0)
         return A, B
 
     def Continuous_Cost_Model(self):
         # return Q, R
+        Q = np.diag(np.ones(12))
+        R = np.diag(np.ones(4))
         return Q, R
 
     def lqr_solve(self, A, B, Q, R):
         # S, K = self.riccattiSolve(A, B, Q, R)
-        S = scipy.linalg.solve_continuous_are(A, B, Q, R)
+        S = la.solve_continuous_are(A, B, Q, R)
         K = np.linalg.inv(R)@(B.T@S)
         return S, K
 
