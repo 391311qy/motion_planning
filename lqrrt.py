@@ -162,9 +162,10 @@ class lqrrt:
         #, the LQRSteer(x, x′) function “connects” state x with x′ 
         # using the local LQR policy calculated by linearizing about x.
         pi = self.LQR.lqr_policy(x, x_p) # numpy array of policies
-        viable_pi = self.restrict(pi)
+        viable_pi = self.restrict_pi(pi) # restrict maximal/minimal control input
         diff = np.subtract(x_p, x)
-        sigma = self.LinearizedMotionModel(diff, viable_pi) # increment on movement
+        viable_diff = self.restrict_diff(diff)
+        sigma = self.LinearizedMotionModel(viable_diff, viable_pi) # increment on movement
         newpose = sigma + np.array(x)
         # return tuple(sigma + np.array(x)), pi
         return tuple(newpose), pi
@@ -183,9 +184,14 @@ class lqrrt:
         return self.cost(self.Parent[x]) + lqrcost
         # return self.cost(self.Parent[x]) + self.env.getDist(self.Parent[x], x)
 
-    def restrict(self, pi):
+    def restrict_pi(self, pi):
         # restricting inputs according to the control limits
         return self.quad.control_restriction(pi)
+    
+    def restrict_diff(self, diff):
+        # restricting inputs for the difference between the states for linearized model
+        # important: manully set the step size.
+        return self.quad.state_restriction(diff)
 
     def path(self):
         path = []

@@ -413,8 +413,13 @@ class Quadrotor:
         self.m = 0.52 # kg
         self.l = 0.2 #m arm length
         self.h = 0.1 #m height of the rotor
+
         self.w_range = [0, 2] # 0 to 2 radians/s control input can get
         self.c_range = [2, 18] # m/s^-2 limit of thrust in vertical direction
+
+        self.x_step_size = [0, 1] # space stepsize
+        self.v_step_size = [0, 2.5] # linear velocity change
+
 
     def linearized_A(self, x0, u0):
         # linearized A at a point
@@ -500,6 +505,18 @@ class Quadrotor:
         if pi[3] < self.c_range[0]: pi[3] = self.c_range[0]
         elif pi[3] > self.c_range[1]: pi[3] = self.c_range[1]
         return pi
+
+    def state_restriction(self, diff):
+        # given x - x0, if this is too large, state transition is not true under linearized model.
+        for i in range(0,3):
+            if diff[i] < self.x_step_size[0]: diff[i] = self.x_step_size[0]
+            elif diff[i] > self.x_step_size[1]: diff[i] = self.x_step_size[1]
+        # TODO: implement the rotation step size
+        for i in range(7,10):
+            if diff[i] < self.v_step_size[0]: diff[i] = self.v_step_size[0]
+            elif diff[i] > self.v_step_size[1]: diff[i] = self.v_step_size[1]
+        return diff
+
 
 class obb(object):
     # P: center point
