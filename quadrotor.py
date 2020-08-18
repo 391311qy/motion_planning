@@ -520,7 +520,7 @@ class env:
         self.quad = Quadrotor()
         q = self.sampleUnitQuaternion()
         self.start = tuple([0.1,0.1,0.1,1,0,0,0,0,0,0])
-        self.goal = tuple([-3.0,-3.0,-3.0,q[0],q[1],q[2],q[3],0,0,0])
+        self.goal = tuple([-3.0,-3.0,-3.0,1,0,0,0,0,0,0])
 
     def isinobs(self, x):
         for i in self.OBB:
@@ -528,22 +528,25 @@ class env:
                 return True
         return False
 
-    def isCollide(self, child, dist=None):
+    def isCollide(self, x, child, dist=None):
         '''see if obb specifed by the state intersects obstacle'''
         # construct the OBB formed by the current state
         OBB = self.quad.state_to_OBB(child)
         # check collision with obb as obstacles
         pos = child[0:3]
+        dist = self.getDist(x, pos)
         if not isinbound(self.boundary, pos):
             return True
         for i in self.OBB:
+            if lineOBB(x[0:3], pos, dist, i):
+                return True
             if OBBOBB(OBB, i):
                 return True
         return False
 
     def getDist(self, x, child):
         # get the distance between two states
-        return np.sqrt((child[6] - x[6])**2 + (child[8] - x[8])**2 + (child[10] - x[10])**2)
+        return np.sqrt((child[0] - x[0])**2 + (child[1] - x[1])**2 + (child[2] - x[2])**2)
 
     def sampleFree(self):
         # x = (x,y,z,q0,q1,q2,q3,vx,vy,vz) in R10

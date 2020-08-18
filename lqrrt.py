@@ -46,11 +46,11 @@ class lqrrt:
         return A@x + B@u
         # define A(x0,u0), B(x0,u0), Q, R here
 
-    def collisionFree(self, x1):
+    def collisionFree(self, x1, x2):
         # x2 = (0,0,0) # center of the inverted pendulum
         # pos1, pos2 = x1[0:3], x2[0:3] # still tuple
         # collide = self.env.isCollide(pos1, pos2, dist = self.env.inv_pen.r)
-        collide = self.env.isCollide(x1)
+        collide = self.env.isCollide(x1, x2)
         return collide
 
 ##################################### LQR RRT star implementation    
@@ -65,7 +65,7 @@ class lqrrt:
             # Xnear = self.LQRNear(self.V, xnew)
             # xmin, sig_min = self.ChooseParent(Xnear, xnew)
             # collide = self.collisionFree(sig_min)
-            collide = self.collisionFree(xnew)
+            collide = self.collisionFree(xnearest, xnew)
             if not collide:
                 self.V.add(xnew)
                 self.E.add((xnearest, xnew))
@@ -102,7 +102,7 @@ class lqrrt:
         for xnear in Xnear:
             sig = self.LQRsteer(xnew, xnear)
             if self.cost(xnew) + self.cost(sig) < self.cost(xnear):
-                if self.collisionFree(sig):
+                if self.collisionFree(xnew, sig):
                     xparent = self.Parent[xnear]
                     E.remove((xparent, xnear))
                     E.add((xnew, xnear))
