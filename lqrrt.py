@@ -53,74 +53,98 @@ class lqrrt:
         collide = self.env.isCollide(x1, x2)
         return collide
 
+    def wireup(self, x, y):
+        self.E.add((x,y)) # add edge
+        self.Parent[x] = y
+
+    def removewire(self, x, y):
+        if (x, y) in self.E:
+            self.E.remove((x, y))
+
+    def reached(self):
+        self.done = True
+        goal = self.env.goal
+        xn = self.LQRNear(self.V, goal)
+        c = [self.cost(x) for x in xn]
+        xn = np.array(xn)
+        xncmin = xn[np.argmin(c)]
+        self.wireup(goal, xncmin)
+        self.Path = self.path()
+
 ##################################### LQR RRT star implementation    
     def LQR_rrt_star(self):
         self.V.add(self.env.start)
-        for i in range(self.maxiter):
-            self.ind += 1
-            print(i)
+        while self.ind < self.maxiter:
+            print(self.ind)
             xrand = self.env.sampleFree()
             xnearest = self.LQRNearest(self.V, xrand)
             xnew, pi = self.LQRsteer(xnearest, xrand)
-            # Xnear = self.LQRNear(self.V, xnew)
-            # xmin, sig_min = self.ChooseParent(Xnear, xnew)
-            # collide = self.collisionFree(sig_min)
             collide = self.collisionFree(xnearest, xnew)
             if not collide:
+                Xnear = self.LQRNear(self.V, xnew)
                 self.V.add(xnew)
-                self.E.add((xnearest, xnew))
-                # self.E.add((xmin, xnew))
-                self.Parent[xnew] = xnearest
-                # self.V, self.E = self.rewire(self.V, self.E, Xnear, xnew)
-
-                # reaching condition
-                if np.linalg.norm(np.subtract(self.env.goal, xnew)) < 6:
-                    self.done = True
-                    self.V.add(self.env.goal)
-                    self.E.add((self.env.goal, xnew))
-                    self.Parent[self.env.goal] = xnew
-                    self.Path = self.path()
-                    break 
-
+                xmin, cmin = xnearest, self.cost(xnearest) + self.LQRcost(xnearest, xnew)
+                # xmin, cmin = xnearest, self.cost(xnearest) + self.env.getDist(xnearest, xnew)
+                Collide = []
+                for xnear in Xnear:
+                    xnear = tuple(xnear)
+                    # c1 = self.cost(xnear) + self.LQRcost(xnew, xnear)
+                    c1 = self.cost(xnear) + self.env.getDist(xnew, xnear)
+                    collide = self.collisionFree(xnew, xnear)
+                    Collide.append(collide)
+                    if not collide and c1 < cmin:
+                        xmin , cmin = xnear, c1
+                self.wireup(xnew, xmin)
+                for i in range(len(Xnear)):
+                    collide = Collide[i]
+                    xnear = tuple(Xnear[i])
+                    c2 = self.cost(xnew) + self.LQRcost(xnew, xnear)
+                    # c2 = self.cost(xnew) + self.env.getDist(xnew, xnear)
+                    if not collide and c2 < self.cost(xnear):
+                        self.removewire(self.Parent[xnear], xnear)
+                        self.wireup(xnear, xnew)
+            self.ind += 1
+        # self.reached()
         visualization(self)
         plt.show()
         return self.V, self.E
 
-    def ChooseParent(self, Xnear, xrand):
-        minCost = np.inf
-        xmin = None
-        sig_min = None
-        for xnear in Xnear:
-            sigma, pi = self.LQRsteer(xnear, xrand)
-            newcost = self.cost(xnear) + self.cost(sigma)
-            if newcost < minCost:
-                minCost, xmin = newcost, xnear
-                sig_min = sigma
-        return xmin, sig_min
+    # def ChooseParent(self, Xnear, xrand):
+    #     minCost = np.inf
+    #     xmin = None
+    #     sig_min = None
+    #     for xnear in Xnear:
+    #         sigma, pi = self.LQRsteer(xnear, xrand)
+    #         newcost = self.cost(xnear) + self.cost(sigma)
+    #         if newcost < minCost:
+    #             minCost, xmin = newcost, xnear
+    #             sig_min = sigma
+    #     return xmin, sig_min
 
-    def rewire(self, V, E, Xnear, xnew):
-        for xnear in Xnear:
-            sig = self.LQRsteer(xnew, xnear)
-            if self.cost(xnew) + self.cost(sig) < self.cost(xnear):
-                if self.collisionFree(xnew, sig):
-                    xparent = self.Parent[xnear]
-                    E.remove((xparent, xnear))
-                    E.add((xnew, xnear))
-        return V, E
+    # def rewire(self, V, E, Xnear, xnew):
+    #     for xnear in Xnear:
+    #         sig = self.LQRsteer(xnew, xnear)
+    #         if self.cost(xnew) + self.cost(sig) < self.cost(xnear):
+    #             if self.collisionFree(xnew, sig):
+    #                 xparent = self.Parent[xnear]
+    #                 E.remove((xparent, xnear))
+    #                 E.add((xnew, xnear))
+    #     return V, E
 
     def LQRNear(self, V, x):
+        V = np.array(list(V))
+        
+        S, K = self.LQR.get_sol(x)
         if len(V) == 1:
             return V
-        S, K = self.LQR.get_sol(x)
-        V = np.array(list(V))
         x = repmat(np.array(x), len(V), 1)
         # r = self.gamma*(np.log(len(V))/len(V))**(1/len(x))
         r = 10000000
         diff = (V - x) # N * d
         argument = [i@S@i.T for i in diff]
         near = np.linalg.norm(argument, 1) < r
-        Xnear = set(map(tuple, V[near]))
-        return Xnear
+        Xnear = np.squeeze(V[near])
+        return np.array(Xnear)
 
     def LQRNearest(self, V, x):
         if len(V) == 1:
@@ -141,26 +165,23 @@ class lqrrt:
         viable_pi = self.restrict(pi)
         diff = np.subtract(x_p, x)
         sigma = self.LinearizedMotionModel(diff, viable_pi) # increment on movement
-        # TODO: check why linearized model does not work on quaternion updates
-        # q = [0] * 4
-        # q[1], q[2], q[3] = x[0], x[2], x[4]
-        # q[0] = np.sqrt(1 - q[1]**2 - q[2]**2 - q[3]**2)
-        # new_quater = q_A(q) @ np.array([diff[0], diff[2], diff[4]])
-        # sigma[0], sigma[2], sigma[4] = new_quater[0], new_quater[1], new_quater[2]
         newpose = sigma + np.array(x)
         # return tuple(sigma + np.array(x)), pi
         return tuple(newpose), pi
 
+    def LQRcost(self, x1, x2):
+        # cost from x1 to x2
+        S, K = self.LQR.get_sol(x1) # TODO: verify if it is at xparent or x.
+        diff = np.array(x2) - np.array(x1)
+        return diff@S@diff.T
+
     def cost(self, x):
-        # returns the cost in the rrt
+        # recursive cost to come
         if x == self.env.start:
             return 0
-        if x not in self.COST:
-            S, K = self.LQR.get_sol(x) # TODO: verify if it is at xparent or x.
-            diff = np.array(self.Parent[x]) - np.array(x)
-            LQRcost = diff@S@diff.T # (v-x)TS(v-s)
-            self.COST[x] = self.cost(self.Parent[x]) + LQRcost
-        return self.COST[x]
+        lqrcost = self.LQRcost(self.Parent[x], x)
+        return self.cost(self.Parent[x]) + lqrcost
+        # return self.cost(self.Parent[x]) + self.env.getDist(self.Parent[x], x)
 
     def restrict(self, pi):
         # restricting inputs according to the control limits
