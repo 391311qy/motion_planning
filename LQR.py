@@ -51,9 +51,8 @@ class lqr:
 
     def lqr_solve(self, A, B, Q, R):
         # S, K = self.riccattiSolve(A, B, Q, R)
-        print(A)
-        A + 10e-6
-        B + 10e-6
+        A += 10e-12
+        B += 10e-12
         S = la.solve_continuous_are(A, B, Q, R)
         K = np.linalg.inv(R)@(B.T@S)
         return S, K
@@ -80,6 +79,7 @@ class lqr:
     def care(self, A, B, Q, R):
         # continuous algebriac riccati equation solver
         # TODO: need to solve CARE.
+        pass
 
 
     

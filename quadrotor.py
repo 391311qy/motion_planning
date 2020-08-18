@@ -274,9 +274,8 @@ def visualization(initparams):
         # E = initparams.E
         #----------- end
         stateOBBlist = np.array([quad.state_to_OBB(v) for v in initparams.V])
-        print([i.O for i in stateOBBlist])
         # edges = initparams.E
-        # Path = np.array(initparams.Path)
+        Path = np.array(initparams.Path)
         start = initparams.env.start
         ax = plt.subplot(111, projection='3d')
         ax.view_init(elev=60., azim=60.)
@@ -290,7 +289,7 @@ def visualization(initparams):
         draw_obb(ax, stateOBBlist, color = 'b')
         draw_block_list(ax, np.array([initparams.env.boundary]), alpha=0)
         draw_line(ax, edges, visibility=0.75, color='g')
-        # draw_line(ax, Path, color='r')
+        draw_line(ax, Path, color='r')
         if len(V) > 0:
             ax.scatter3D(V[:, 0], V[:, 1], V[:, 2], s=2, color='g', )
         # ax.plot(start[0:1], start[1:2], start[2:], 'go', markersize=7, markeredgecolor='k')
@@ -486,6 +485,7 @@ class Quadrotor:
         # get an oriented bounding box representing the quadrotor from a state
         q = x[3:7]
         p = x[0:3]
+        q = q / np.linalg.norm(q) # normalization
         R = q_to_R(q)
         # x, y, z = q_to_angles(q)
         # R = R_matrix(z_angle = z, y_angle = y, x_angle = x)
@@ -519,8 +519,8 @@ class env:
                              obb([3.0,3.0,3.0],[0.5,2.0,2.5],R_matrix(45,0,0))])
         self.quad = Quadrotor()
         q = self.sampleUnitQuaternion()
-        self.start = tuple([0,0,0,1,0,0,0,0,0,0])
-        self.goal = tuple([1]*10)
+        self.start = tuple([0.1,0.1,0.1,1,0,0,0,0,0,0])
+        self.goal = tuple([-3.0,-3.0,-3.0,q[0],q[1],q[2],q[3],0,0,0])
 
     def isinobs(self, x):
         for i in self.OBB:
@@ -530,10 +530,12 @@ class env:
 
     def isCollide(self, child, dist=None):
         '''see if obb specifed by the state intersects obstacle'''
-        # x = (q1,w1,q2,w2,q3,w3,x,vx,y,vy,z,vz) in R12
         # construct the OBB formed by the current state
         OBB = self.quad.state_to_OBB(child)
         # check collision with obb as obstacles
+        pos = child[0:3]
+        if not isinbound(self.boundary, pos):
+            return True
         for i in self.OBB:
             if OBBOBB(OBB, i):
                 return True
@@ -577,6 +579,7 @@ class env:
             if OBBOBB(i, OBB):
                 return self.sampleFreePos(R)
         return x
+
     
 if __name__ == '__main__':
     Env = env()

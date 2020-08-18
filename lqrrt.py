@@ -35,6 +35,7 @@ class lqrrt:
 
         self.done = False
         self.ind = 0
+        self.Path = []
 
     def LinearizedMotionModel(self, x, u):
         # x: tuple state (x-x0)
@@ -69,8 +70,18 @@ class lqrrt:
                 self.V.add(xnew)
                 self.E.add((xnearest, xnew))
                 # self.E.add((xmin, xnew))
-                # self.Parent[xnew] = xmin
+                self.Parent[xnew] = xnearest
                 # self.V, self.E = self.rewire(self.V, self.E, Xnear, xnew)
+
+                # reaching condition
+                if np.linalg.norm(np.subtract(self.env.goal, xnew)) < 6:
+                    self.done = True
+                    self.V.add(self.env.goal)
+                    self.E.add((self.env.goal, xnew))
+                    self.Parent[self.env.goal] = xnew
+                    self.Path = self.path()
+                    break 
+
         visualization(self)
         plt.show()
         return self.V, self.E
@@ -82,7 +93,6 @@ class lqrrt:
         for xnear in Xnear:
             sigma, pi = self.LQRsteer(xnear, xrand)
             newcost = self.cost(xnear) + self.cost(sigma)
-            print(self.cost(sigma))
             if newcost < minCost:
                 minCost, xmin = newcost, xnear
                 sig_min = sigma
@@ -156,8 +166,21 @@ class lqrrt:
         # restricting inputs according to the control limits
         return self.quad.control_restriction(pi)
 
+    def path(self):
+        path = []
+        x = self.env.goal
+        i = 0
+        while x != self.env.start:
+            path.append((self.Parent[x],x))
+            x = self.Parent[x]
+            i+=1
+            if i > 10000:
+                break 
+        return path
+
+
 if __name__ == '__main__':
-    session = lqrrt(100)
+    session = lqrrt(1000)
     V, E = session.LQR_rrt_star()
     # quad = Quadrotor()
     # pose_set = [quad.state_to_OBB(v) for v in V]
