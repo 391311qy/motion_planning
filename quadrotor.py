@@ -2,19 +2,18 @@
 Modeling and Simulation '''
 
 import numpy as np
-
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+import mpl_toolkits.mplot3d as plt3d
+from mpl_toolkits.mplot3d import proj3d
 
 ########################
 #      Quaternion      #
 ########################
 def q_mult(q, p):
     # return multiplication between two quaternion
-    A = np.zeros((4,4))
-    A[0,0] = p[0]
-    A[0, 1:4] = (-p[1], -p[2], -p[3])
-    A[1:4, 0] = p[1:4]
-    A[1:4, 1:4] =  p[0]* np.eye(3) + hat_cross(p[1:4])
-    return A@np.array(q)
+    return q_L(q)@np.array(p)
 
 def q_inv(q):
     # calculate inverse of a quaternion
@@ -35,23 +34,58 @@ def hat_cross(a):
     A[2,1] = a[0]
     return A
 
-def q_A(q): 
-    # A(q0)*(q-q0)
-    return np.eye(3) - 2 * hat_cross(q[1:4])
+def q_L(q):
+    return np.array(
+        [[q[0], -q[1], -q[2], -q[3]],
+         [q[1],  q[0], -q[3],  q[2]],
+         [q[2],  q[3],  q[0], -q[1]],
+         [q[3], -q[2],  q[1],  q[0]]])
 
-def q_to_R(q):
+def q_R(q):
+    return np.array(
+        [[q[0], -q[1], -q[2], -q[3]],
+         [q[1],  q[0],  q[3], -q[2]],
+         [q[2], -q[3],  q[0],  q[1]],
+         [q[3],  q[2], -q[1],  q[0]]])
+
+def q_to_R(q, homogeneous = True):
     # http://www.iri.upc.edu/people/jsola/JoanSola/objectes/notes/kinematics.pdf
-    R = np.zeros([3,3])
-    R[0,0] = q[0]**2 + q[1]**2 - q[2]**2 - q[3]**2
-    R[0,1] = 2*(q[1]*q[2] - q[0]*q[3])
-    R[0,2] = 2*(q[1]*q[3] + q[0]*q[1])
-    R[1,0] = 2*(q[1]*q[2] + q[0]*q[3])
-    R[1,1] = q[0]**2 - q[1]**2 + q[2]**2 - q[3]**2
-    R[1,2] = 2*(q[2]*q[3] - q[0]*q[1])
-    R[2,0] = 2*(q[1]*q[3] - q[0]*q[2])
-    R[2,1] = 2*(q[2]*q[3] - q[0]*q[1])
-    R[2,2] =  q[0]**2 - q[1]**2 - q[2]**2 + q[3]**2
+    # https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+    if homogeneous:
+        '''this is the homogeneous expression of R'''
+        R = np.zeros([3,3])
+        R[0,0] = q[0]**2 + q[1]**2 - q[2]**2 - q[3]**2
+        R[0,1] = 2*(q[1]*q[2] - q[0]*q[3])
+        R[0,2] = 2*(q[1]*q[3] + q[0]*q[1])
+        R[1,0] = 2*(q[1]*q[2] + q[0]*q[3])
+        R[1,1] = q[0]**2 - q[1]**2 + q[2]**2 - q[3]**2
+        R[1,2] = 2*(q[2]*q[3] - q[0]*q[1])
+        R[2,0] = 2*(q[1]*q[3] - q[0]*q[2])
+        R[2,1] = 2*(q[2]*q[3] - q[0]*q[1])
+        R[2,2] =  q[0]**2 - q[1]**2 - q[2]**2 + q[3]**2
+    else:
+        '''this is the nonhomogeneous expression of R'''
+        R = np.zeros([3,3])
+        R[0,0] = 1 - 2 * (q[2]**2 + q[3]**2)
+        R[0,1] = 2*(q[1]*q[2] - q[0]*q[3])
+        R[0,2] = 2*(q[1]*q[3] + q[0]*q[1])
+        R[1,0] = 2*(q[1]*q[2] + q[0]*q[3])
+        R[1,1] = 1 - 2 * (q[1]**2 + q[3]**2)
+        R[1,2] = 2*(q[2]*q[3] - q[0]*q[1])
+        R[2,0] = 2*(q[1]*q[3] - q[0]*q[2])
+        R[2,1] = 2*(q[2]*q[3] - q[0]*q[1])
+        R[2,2] = 1 - 2 * (q[1]**2 + q[2]**2) 
     return R
+
+def q_to_angles(q):
+    # https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+    thetax = np.arctan2(2*(q[0]*q[1]+q[2]*q[3]) , (1 - 2*(q[1]**2 + q[2]**2)))
+    thetay = np.arcsin(2*(q[0]*q[2]-q[3]*q[1]))
+    thetaz = np.arctan2(2*(q[0]*q[3]+q[1]*q[2]) , (1 - 2*(q[2]**2 + q[3]**2)))
+    # thetax = np.arctan(2*(q[0]*q[1]+q[2]*q[3]) / (1 - 2*(q[1]**2 + q[2]**2)))
+    # thetay = np.arcsin(2*(q[0]*q[2]-q[3]*q[1]))
+    # thetaz = np.arctan(2*(q[0]*q[3]+q[1]*q[2]) / (1 - 2*(q[2]**2 + q[3]**2)))
+    return thetax, thetay, thetaz
 
 ########################
 #    normal methods    #
@@ -228,78 +262,245 @@ def OBBOBB(obb1, obb2):
             return True
 
 ########################
+#    visualization     #
+########################
+
+def visualization(initparams):
+    quad = Quadrotor()
+    if initparams.ind % 100 == 0 or initparams.done:
+        #----------- list structure
+        V = np.array(list(initparams.V))
+        edges = np.array([[(i[0][0],i[0][1],i[0][2]),(i[1][0],i[1][1],i[1][2])] for i in initparams.E])
+        # E = initparams.E
+        #----------- end
+        stateOBBlist = np.array([quad.state_to_OBB(v) for v in initparams.V])
+        print([i.O for i in stateOBBlist])
+        # edges = initparams.E
+        # Path = np.array(initparams.Path)
+        start = initparams.env.start
+        ax = plt.subplot(111, projection='3d')
+        ax.view_init(elev=60., azim=60.)
+        # ax.view_init(elev=-8., azim=180)
+        ax.clear()
+        # drawing objects
+        # draw_Spheres(ax, initparams.env.balls)
+        # draw_block_list(ax, initparams.env.blocks)
+        if initparams.env.OBB is not None:
+            draw_obb(ax, initparams.env.OBB)
+        draw_obb(ax, stateOBBlist, color = 'b')
+        draw_block_list(ax, np.array([initparams.env.boundary]), alpha=0)
+        draw_line(ax, edges, visibility=0.75, color='g')
+        # draw_line(ax, Path, color='r')
+        if len(V) > 0:
+            ax.scatter3D(V[:, 0], V[:, 1], V[:, 2], s=2, color='g', )
+        # ax.plot(start[0:1], start[1:2], start[2:], 'go', markersize=7, markeredgecolor='k')
+        # ax.plot(goal[0:1], goal[1:2], goal[2:], 'ro', markersize=7, markeredgecolor='k')
+        # adjust the aspect ratio
+        ax.dist = 7
+        set_axes_equal(ax)
+        make_transparent(ax)
+        ax.set_axis_off()
+        plt.pause(0.0001)
+
+def set_axes_equal(ax):
+    '''Make axes of 3D plot have equal scale so that spheres appear as spheres,
+    cubes as cubes, etc..  This is one possible solution to Matplotlib's
+    ax.set_aspect('equal') and ax.axis('equal') not working for 3D.
+    https://stackoverflow.com/questions/13685386/matplotlib-equal-unit-length-with-equal-aspect-ratio-z-axis-is-not-equal-to
+    Input
+      ax: a matplotlib axis, e.g., as output from plt.gca().
+    '''
+
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence I call half the max range the plot radius.
+    plot_radius = 0.5*max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+def make_transparent(ax):
+    # make the panes transparent
+    ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    # make the grid lines transparent
+    ax.xaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+    ax.yaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+    ax.zaxis._axinfo["grid"]['color'] =  (1,1,1,0)
+
+def draw_line(ax, SET, visibility=1, color=None):
+    if SET != []:
+        for i in SET:
+            xs = i[0][0], i[1][0]
+            ys = i[0][1], i[1][1]
+            zs = i[0][2], i[1][2]
+            line = plt3d.art3d.Line3D(xs, ys, zs, alpha=visibility, color=color)
+            ax.add_line(line)
+
+def draw_block_list(ax, blocks, color=None, alpha=0.15):
+    '''
+    drawing the blocks on the graph
+    '''
+    v = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],
+                 dtype='float')
+    f = np.array([[0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7], [0, 1, 2, 3], [4, 5, 6, 7]])
+    n = blocks.shape[0]
+    d = blocks[:, 3:6] - blocks[:, :3]
+    vl = np.zeros((8 * n, 3))
+    fl = np.zeros((6 * n, 4), dtype='int64')
+    for k in range(n):
+        vl[k * 8:(k + 1) * 8, :] = v * d[k] + blocks[k, :3]
+        fl[k * 6:(k + 1) * 6, :] = f + k * 8
+    if type(ax) is Poly3DCollection:
+        ax.set_verts(vl[fl])
+    else:
+        pc = Poly3DCollection(vl[fl], alpha=alpha, linewidths=1, edgecolors='k')
+        pc.set_facecolor(color)
+        h = ax.add_collection3d(pc)
+        return h
+
+def draw_obb(ax, OBB, color=None, alpha=0.15):
+    f = np.array([[0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7], [0, 1, 2, 3], [4, 5, 6, 7]])
+    n = OBB.shape[0]
+    vl = np.zeros((8 * n, 3))
+    fl = np.zeros((6 * n, 4), dtype='int64')
+    for k in range(n):
+        vl[k * 8:(k + 1) * 8, :] = obb_verts(OBB[k])
+        fl[k * 6:(k + 1) * 6, :] = f + k * 8
+    if type(ax) is Poly3DCollection:
+        ax.set_verts(vl[fl])
+    else:
+        pc = Poly3DCollection(vl[fl], alpha=alpha, linewidths=1, edgecolors='k')
+        pc.set_facecolor(color)
+        h = ax.add_collection3d(pc)
+        return h
+
+def obb_verts(obb):
+    # 0.017004013061523438 for 1000 iters
+    ori_body = np.array([[1, 1, 1], [-1, 1, 1], [-1, -1, 1], [1, -1, 1], \
+                         [1, 1, -1], [-1, 1, -1], [-1, -1, -1], [1, -1, -1]])
+    # P + (ori * E)
+    ori_body = np.multiply(ori_body, obb.E)
+    # obb.O is orthornormal basis in {W}, aka rotation matrix in SO(3)
+    verts = (obb.O @ ori_body.T).T + obb.P
+    return verts
+
+########################
 # quadrotor classes    #
 ########################
 class Quadrotor:
+    '''Foehn, Philipp, and Davide Scaramuzza. 
+    "Onboard state dependent lqr for agile quadrotors." 
+    2018 IEEE International Conference on Robotics and Automation (ICRA). IEEE, 2018.'''
 
     def __init__(self):
-        # state is p v q w 
-        # where 
-        # p = (x, y, z)
-        # v = (U, V, W)
-        # q = (q0, q1, q2, q3) attitude in body frame
-        # w = (P, Q,  R) angular velocity in body frame
-        # x = (q1,w1,q2,w2,q3,w3,x,vx,y,vy,z,vz) in R12
+        # x = (x,y,z,q0,q1,q2,q3,vx,vy,vz) : state vector in R10
+        # u = (wx, wy, wz, c) : w. is the angular acceleration, c is thrust
 
         # parameters
         self.g = 9.8 # m/s^2
         self.m = 0.52 # kg
-        self.JR = 8.66e-7 # rads/s, single rotor moment of inertia
-        self.omega_norm = [0,278] # rad/s, range of angular velocity 
-        self.Ixx = 6.228e-2 #kgm^2, moment inertia in x-axis
-        self.Iyy = 6.225e-2 #kgm^2, moment inertia in y-axis
-        self.Izz = 1.121e-2 #kgm^2, moment inertia in z-axis
-        self.l = 0.235 #m rotor mass center length
-        self.b = 3.13e-5 #Ns^2 lift coefficient
-        self.d = 7.5e-7 # drag coeff
-
-        # matrices
-        self.J = np.diag([self.Ixx, self.Iyy, self.Izz])
-        self.U_by_F = np.array([[self.b,   self.b,   self.b,   self.b],
-                                [0, self.l*self.b, 0, - self.l*self.b],
-                                [- self.l*self.b, 0, self.l*self.b, 0],
-                                [self.d,  -self.d,   self.d,  -self.d]])
-        self.F_by_U = np.linalg.inv(self.U_by_F)
-
-        # contorl input range
-        self.contorl_max = self.U_by_F@np.array([self.omega_norm[1]**2]*4)
-
+        self.l = 0.2 #m arm length
+        self.h = 0.1 #m height of the rotor
+        self.w_range = [0, 2] # 0 to 2 radians/s control input can get
+        self.c_range = [2, 18] # m/s^-2 limit of thrust in vertical direction
 
     def linearized_A(self, x0, u0):
-        #-------------------quadrotor
-        # TODO: refine the motion model. should be linearized at a different point
-        A = np.zeros([12,12])
-        A[0,1] = 0.5
-        A[2,3] = 0.5
-        A[4,5] = 0.5
-        A[6,7] = 1
-        A[7,2] = -2*self.g
-        A[8,9] = 1
-        A[9,0] = 2*self.g
-        A[10,11] = 1
+        # linearized A at a point
+        q = x0[3:7]
+        w = x0[7:10]
+        c = u0[3]
+        A = np.zeros([10, 10])
+        dpdv = self.diff_p_dv()
+        dqdq = self.diff_q_dq(q, w)
+        dvdq = self.diff_v_dq(q, c)
+        A[0:3, 7:10] = dpdv
+        A[3:7, 3:7] = dqdq
+        A[7:10, 3:7] = dvdq
         return A
 
     def linearized_B(self,x0, u0):
-        # B matrix
-        # TODO: refine the motion model. should be linearized at a different point
-        B = np.zeros([12,4])
-        B[1,1] = 1/self.Ixx
-        B[3,2] = 1/self.Iyy
-        B[5,3] = 1/self.Izz
-        B[11,0] = 1/self.m
+        # linearized B at a point
+        q = x0[3:7]
+        w = x0[7:10]
+        c = u0[3]
+        dvdc = self.diff_v_dc(q, c)
+        dqdw = self.diff_q_dw(q, w)
+        B = np.zeros([10, 4])
+        B[3:7, 0:3] = dqdw
+        B[7:10, 3] = dvdc
         return B
+        
+    def diff_unit_quaternion(self, q):
+        # differentiation wrt a unit quaternion
+        n = np.linalg.norm(q)
+        return (np.eye(4) - np.outer(q, q) / n**2) / n
+
+    def diff_p_dv(self):
+        # diffrentiation of pdot wrt q
+        return np.eye(3)
+
+    def diff_q_dq(self, q, w):
+        # diffrentiation of qdot wrt q
+        w_comp = [0] + list(w)
+        return 0.5 * q_R(w_comp) @ self.diff_unit_quaternion(q)
+
+    def diff_q_dw(self, q, w):
+        # differentiation of qdot wrt w
+        return 0.5 * np.array([
+            [-q[1], -q[2], -q[3]],
+            [ q[0], -q[3], -q[2]],
+            [ q[3],  q[0],  q[1]],
+            [-q[2],  q[1],  q[0]]
+        ])
+
+    def diff_v_dq(self, q, c):
+        # differentiation of vdot wrt q
+        return 2 * c * np.array([
+            [ q[2],  q[3],  q[0],  q[1]],
+            [-q[1], -q[0],  q[3],  q[2]],
+            [ q[0], -q[1], -q[2], -q[3]]
+        ]) @ self.diff_unit_quaternion(q)
+
+    def diff_v_dc(self, q, c):
+        # differentiation of vdot wrt c
+        return np.array([
+            q[0] * q[2] + q[1] * q[3],
+            q[2] * q[3] - q[0] * q[1],
+            q[0]**2 - q[1]**2 - q[2]**2 + q[3]**2
+        ])
 
     def state_to_OBB(self, x):
         # get an oriented bounding box representing the quadrotor from a state
-        pos = (x[6], x[8], x[10])
-        q_vec = [x[0], x[2], x[4]]
-        q0 = np.sqrt(1 - np.linalg.norm(q_vec))
-        q = [q0] + q_vec
+        q = x[3:7]
+        p = x[0:3]
         R = q_to_R(q)
-        OBB = obb(P = pos, E = (self.l, self.l, 1), O = R)
+        # x, y, z = q_to_angles(q)
+        # R = R_matrix(z_angle = z, y_angle = y, x_angle = x)
+        OBB = obb(P = p, E = (self.l, self.l, self.h), O = R)
         return OBB
 
-    
+    def control_restriction(self, pi):
+        # given a contorl input, restrict it
+        for i in range(0,3):
+            if pi[i] < self.w_range[0]: pi[i] = self.w_range[0]
+            elif pi[i] > self.w_range[1]: pi[i] = self.w_range[1]
+        if pi[3] < self.c_range[0]: pi[3] = self.c_range[0]
+        elif pi[3] > self.c_range[1]: pi[3] = self.c_range[1]
+        return pi
+
 class obb(object):
     # P: center point
     # E: extents
@@ -317,8 +518,9 @@ class env:
         self.OBB = np.array([obb([0.0,0.0,-5.0],[1.0,1.0,1.0],R_matrix(135,0,0)),
                              obb([3.0,3.0,3.0],[0.5,2.0,2.5],R_matrix(45,0,0))])
         self.quad = Quadrotor()
-        self.start = tuple([0]*12)
-        self.goal = tuple([1]*12)
+        q = self.sampleUnitQuaternion()
+        self.start = tuple([0,0,0,1,0,0,0,0,0,0])
+        self.goal = tuple([1]*10)
 
     def isinobs(self, x):
         for i in self.OBB:
@@ -330,11 +532,7 @@ class env:
         '''see if obb specifed by the state intersects obstacle'''
         # x = (q1,w1,q2,w2,q3,w3,x,vx,y,vy,z,vz) in R12
         # construct the OBB formed by the current state
-        pos = (child[6], child[8], child[10])
         OBB = self.quad.state_to_OBB(child)
-        # check if the position is in bound
-        if not isinbound(self.boundary, pos): 
-            return True
         # check collision with obb as obstacles
         for i in self.OBB:
             if OBBOBB(OBB, i):
@@ -346,19 +544,18 @@ class env:
         return np.sqrt((child[6] - x[6])**2 + (child[8] - x[8])**2 + (child[10] - x[10])**2)
 
     def sampleFree(self):
-        # x = (q1,w1,q2,w2,q3,w3,x,vx,y,vy,z,vz) in R12
-        state = [0]*12
+        # x = (x,y,z,q0,q1,q2,q3,vx,vy,vz) in R10
+        state = [0]*10
         q = self.sampleUnitQuaternion()
-        x = self.sampleFreePos()
-        w = np.random.uniform(-20, 20, size=3)
+        x = self.sampleFreePos(R = q_to_R(q))
         v = np.random.uniform(-10, 10, size=3)
-        state[0], state[2], state[4] = q[1], q[2], q[3]
-        state[1], state[3], state[5] = w[0], w[1], w[2]
-        state[6], state[8], state[10] = x[0], x[1], x[2]
-        state[7], state[9], state[11] = v[0], v[1], v[2]
+        state[0], state[1], state[2] = x[0], x[1], x[2]
+        state[3], state[4], state[5], state[6] = q[0], q[1], q[2], q[3]
+        state[7], state[8], state[9] = v[0], v[1], v[2]
         return tuple(state)
 
     def sampleUnitQuaternion(self):
+        # sample an unit quaternion
         # https://www.ri.cmu.edu/pub_files/pub4/kuffner_james_2004_1/kuffner_james_2004_1.pdf
         q = [0]*4
         s = np.random.uniform()
@@ -372,14 +569,21 @@ class env:
         q[3] = np.sin(theta2) * sig2
         return q
 
-    def sampleFreePos(self):
+    def sampleFreePos(self, R):
+        # given rotation matrix, construct an obb and see if obb is free of other obbs
         x = np.random.uniform(self.boundary[0:3], self.boundary[3:6])
+        OBB = obb(P = x, E = [self.quad.l, self.quad.l, self.quad.h], O = R)
         for i in self.OBB:
-            if isinobb(i, x):
-                return self.sampleFreePos()
+            if OBBOBB(i, OBB):
+                return self.sampleFreePos(R)
         return x
     
 if __name__ == '__main__':
     Env = env()
     q = Env.sampleUnitQuaternion()
-    print(np.linalg.norm(q))
+    R = q_to_R(q, homogeneous= False)
+    x, y, z = q_to_angles(q)
+    print((x,y,z))
+    R2 = np.linalg.inv(R_matrix(x_angle = x, y_angle = y, z_angle = z))
+    print(R) 
+    print(R2)

@@ -9,27 +9,32 @@ Perez, Alejandro, et al.
 '''
 
 import numpy as np
+import matplotlib.pyplot as plt
 import numpy.linalg as npl
 from numpy.matlib import repmat
 
 # from inv_pendulum import env
-from quadrotor import env, Quadrotor
+from quadrotor import env, Quadrotor, visualization, q_L
 from LQR import lqr
 
 
 class lqrrt:
 
-    def __init__(self):
+    def __init__(self, n = 1000):
         self.env = env()
-        self.V = set() # set of positions
-        self.E = set() # set of edges
-        self.X = set() # set of states
-        self.Parent = {}
-        self.gamma = 10000
+        self.quad = Quadrotor()
         self.LQR = lqr()
+        self.V = set() # set of vertices
+        self.E = set() # set of edges
+        self.Parent = {}
         self.COST = {}
         self.STAGECOST = {}
-        self.maxiter = 100
+        self.gamma = 10000
+        self.maxiter = n
+
+
+        self.done = False
+        self.ind = 0
 
     def LinearizedMotionModel(self, x, u):
         # x: tuple state (x-x0)
@@ -51,6 +56,7 @@ class lqrrt:
     def LQR_rrt_star(self):
         self.V.add(self.env.start)
         for i in range(self.maxiter):
+            self.ind += 1
             print(i)
             xrand = self.env.sampleFree()
             xnearest = self.LQRNearest(self.V, xrand)
@@ -65,6 +71,8 @@ class lqrrt:
                 # self.E.add((xmin, xnew))
                 # self.Parent[xnew] = xmin
                 # self.V, self.E = self.rewire(self.V, self.E, Xnear, xnew)
+        visualization(self)
+        plt.show()
         return self.V, self.E
 
     def ChooseParent(self, Xnear, xrand):
@@ -120,8 +128,18 @@ class lqrrt:
         #, the LQRSteer(x, x′) function “connects” state x with x′ 
         # using the local LQR policy calculated by linearizing about x.
         pi = self.LQR.lqr_policy(x, x_p) # numpy array of policies
-        sigma = self.LinearizedMotionModel(np.subtract(x_p, x), pi) # increment on movement
-        return tuple(sigma + np.array(x)), pi
+        viable_pi = self.restrict(pi)
+        diff = np.subtract(x_p, x)
+        sigma = self.LinearizedMotionModel(diff, viable_pi) # increment on movement
+        # TODO: check why linearized model does not work on quaternion updates
+        # q = [0] * 4
+        # q[1], q[2], q[3] = x[0], x[2], x[4]
+        # q[0] = np.sqrt(1 - q[1]**2 - q[2]**2 - q[3]**2)
+        # new_quater = q_A(q) @ np.array([diff[0], diff[2], diff[4]])
+        # sigma[0], sigma[2], sigma[4] = new_quater[0], new_quater[1], new_quater[2]
+        newpose = sigma + np.array(x)
+        # return tuple(sigma + np.array(x)), pi
+        return tuple(newpose), pi
 
     def cost(self, x):
         # returns the cost in the rrt
@@ -134,11 +152,15 @@ class lqrrt:
             self.COST[x] = self.cost(self.Parent[x]) + LQRcost
         return self.COST[x]
 
+    def restrict(self, pi):
+        # restricting inputs according to the control limits
+        return self.quad.control_restriction(pi)
+
 if __name__ == '__main__':
-    session = lqrrt()
+    session = lqrrt(100)
     V, E = session.LQR_rrt_star()
-    quad = Quadrotor()
-    pose_set = [quad.state_to_OBB(v) for v in V]
+    # quad = Quadrotor()
+    # pose_set = [quad.state_to_OBB(v) for v in V]
 
         
 

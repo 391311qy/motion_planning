@@ -13,6 +13,17 @@ class lqr:
 
     def __init__(self):
         # records LQR solution at every point
+        '''
+        params: 
+        len_x: input state length
+        len_u: input control length
+        S_set: sln to riccatti eqn
+        K_set: LQR gain
+        Q: quadratic cost for state
+        R: quadratic cost for control
+        '''
+        self.len_x = 10
+        self.len_u = 4
         self.S_set = {}
         self.K_set = {}
         self.Q, self.R = self.Continuous_Cost_Model()
@@ -20,18 +31,29 @@ class lqr:
 
     def Linearized_Motion_Model(self, x0, u0):
         # return A(x0, u0), B(x0, u0)
+        '''
+        params:
+        x0, u0: reference state and reference control
+        returns: 
+        A: linearized transition matrix
+        B: linearized control matrix
+        x_ = A(.)(x-x0) + B(.)(u-u0) is linearized motion model 
+        '''
         A = self.quad.linearized_A(x0, u0)
         B = self.quad.linearized_B(x0, u0)
         return A, B
 
     def Continuous_Cost_Model(self):
         # return Q, R
-        Q = np.diag(np.ones(12))
-        R = np.diag(np.ones(4))
+        Q = np.diag([100, 100, 100, 1, 1, 1, 1, 10, 10, 10])
+        R = np.diag([1, 5, 5, 0.1])
         return Q, R
 
     def lqr_solve(self, A, B, Q, R):
         # S, K = self.riccattiSolve(A, B, Q, R)
+        print(A)
+        A + 10e-6
+        B + 10e-6
         S = la.solve_continuous_are(A, B, Q, R)
         K = np.linalg.inv(R)@(B.T@S)
         return S, K
@@ -40,7 +62,7 @@ class lqr:
         # get the stored solution of CARE
         if x not in self.S_set:
             Q, R = self.Q, self.R
-            A, B = self.Linearized_Motion_Model(x, 0)
+            A, B = self.Linearized_Motion_Model(x, self.quad.control_restriction(np.zeros(self.len_u)))
             S, K = self.lqr_solve(A, B, Q, R)
             self.S_set[x] = S
             self.K_set[x] = K
@@ -54,5 +76,10 @@ class lqr:
         x_bar = x_p - x
         policy = -(K@x_bar)
         return policy
+
+    def care(self, A, B, Q, R):
+        # continuous algebriac riccati equation solver
+        # TODO: need to solve CARE.
+
 
     
