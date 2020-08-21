@@ -51,35 +51,23 @@ class lqr:
 
     def lqr_solve(self, A, B, Q, R):
         # S, K = self.riccattiSolve(A, B, Q, R)
-        A += 10e-12
-        B += 10e-12
-        S = la.solve_continuous_are(A, B, Q, R)
+        A += 10e-6
+        B += 10e-6
+        S = la.solve_discrete_are(A, B, Q, R)
         K = np.linalg.inv(R)@(B.T@S)
         return S, K
 
-    def get_sol(self, x):
-        # get the stored solution of CARE
-        if x not in self.S_set:
-            Q, R = self.Q, self.R
-            A, B = self.Linearized_Motion_Model(x, self.quad.control_restriction(np.zeros(self.len_u)))
-            S, K = self.lqr_solve(A, B, Q, R)
-            self.S_set[x] = S
-            self.K_set[x] = K
-            return S, K
-        return self.S_set[x], self.K_set[x]
-
-    def lqr_policy(self, x, x_p):
-        S, K = self.get_sol(x)
+    def lqr_policy(self, x, x_p, K_x_p):
+        # get the policy from x to x_p
         x = np.array(x)
         x_p = np.array(x_p)
-        x_bar = x_p - x
-        policy = -(K@x_bar)
+        x_bar = x - x_p
+        policy = -(K_x_p@x_bar)
         return policy
 
-    def care(self, A, B, Q, R):
-        # continuous algebriac riccati equation solver
-        # TODO: need to solve CARE.
-        pass
+if __name__ == "__main__":
+    pass
 
+   
 
     

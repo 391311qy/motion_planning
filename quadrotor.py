@@ -11,6 +11,50 @@ from mpl_toolkits.mplot3d import proj3d
 ########################
 #      Quaternion      #
 ########################
+
+def q_dist(q1, q2):
+    # compute approximate distance metric between two unit quaternions
+    # https://www.ri.cmu.edu/pub_files/pub4/kuffner_james_2004_1/kuffner_james_2004_1.pdf
+    wr = 1
+    q1 = q1 / np.linalg.norm(q1)
+    q2 = q2 / np.linalg.norm(q2)
+    lamb = np.inner(q1, q2)
+    pr = wr * (1 - abs(lamb))
+    return pr
+
+def q_to_axis_angle(q):
+    # axis angle representation of q
+    q = q / np.linalg.norm(q)
+    theta = 2 * np.arctan2( np.sqrt(q[1]**2 + q[2]**2 + q[3]**2), q[0] )
+    w = [q[1] / np.sin(theta/2), q[2] / np.sin(theta/2), q[3] / np.sin(theta/2)]
+    return theta, w
+
+def q_slerp(q1, q2, t):
+    # slerp between two quaternions,
+    # roughly measures rotation between two quaternions
+    # https://www.euclideanspace.com/maths/algebra/realNormedAlgebra/quaternions/slerp/index.htm
+    # http://number-none.com/product/Understanding%20Slerp,%20Then%20Not%20Using%20It/
+    q1 = np.array(q1) / np.linalg.norm(q1)
+    q2 = np.array(q2) / np.linalg.norm(q2)
+    r = np.dot(q1, q2)
+    threshold = 0.995 # if 1, the two poses are the same
+    if r < threshold:
+        res = q1 + t * (q2 - q1) 
+        res = res / np.linalg.norm(res)
+        return res
+    r = np.clip(r, -1, 1) # stay witin the range of cos
+    theta_0 = np.arccos(r)
+    theta = theta_0 * t
+    v2 = q2 - q1 * r
+    v2 = v2 / np.linalg.norm(v2)
+    return q1 * np.cos(theta) + v2 * np.sin(theta)
+
+def axis_angle_to_q(theta, w):
+    # go from axis angle
+    q0 = np.cos(theta)
+    vec = np.array(w) * np.sin(theta/2)
+    return np.array([q0,vec[0],vec[1],vec[2]])
+
 def q_mult(q, p):
     # return multiplication between two quaternion
     return q_L(q)@np.array(p)
@@ -138,7 +182,7 @@ def lineAABB(p0, p1, dist, aabb):
     # I.cross(s axis) ?
     r = aabb.E[1] * abs(I[2]) + aabb.E[2] * abs(I[1])
     if abs(T[1] * I[2] - T[2] * I[1]) > r: return False
-    # I.cross(y axis) ?
+    # I.cross(y axis) ?https://www.euclideanspace.com/maths/algebra/realNormedAlgebra/quaternions/slerp/index.htm
     r = aabb.E[0] * abs(I[2]) + aabb.E[2] * abs(I[0])
     if abs(T[2] * I[0] - T[0] * I[2]) > r: return False
     # I.cross(z axis) ?
@@ -276,24 +320,23 @@ def visualization(initparams):
         stateOBBlist = np.array([quad.state_to_OBB(v) for v in initparams.V])
         # edges = initparams.E
         Path = np.array(initparams.Path)
-        start = initparams.env.start
+        start = np.array([0.1,0.1,0.1,1,0,0,0,0,0,0])
+        goal = np.array([-3.0,-3.0,-3.0,1,0,0,0,0,0,0])
         ax = plt.subplot(111, projection='3d')
-        ax.view_init(elev=60., azim=60.)
-        # ax.view_init(elev=-8., azim=180)
-        ax.clear()
+        ax.view_init(elev=60.)
         # drawing objects
         # draw_Spheres(ax, initparams.env.balls)
         # draw_block_list(ax, initparams.env.blocks)
         if initparams.env.OBB is not None:
             draw_obb(ax, initparams.env.OBB)
-        draw_obb(ax, stateOBBlist, color = 'b')
+        draw_obb(ax, stateOBBlist, color = 'b', alpha=0)
         draw_block_list(ax, np.array([initparams.env.boundary]), alpha=0)
         draw_line(ax, edges, visibility=0.75, color='g')
         draw_line(ax, Path, color='r')
         if len(V) > 0:
             ax.scatter3D(V[:, 0], V[:, 1], V[:, 2], s=2, color='g', )
-        # ax.plot(start[0:1], start[1:2], start[2:], 'go', markersize=7, markeredgecolor='k')
-        # ax.plot(goal[0:1], goal[1:2], goal[2:], 'ro', markersize=7, markeredgecolor='k')
+        ax.plot(start[0:1], start[1:2], start[2:3], 'go', markersize=7, markeredgecolor='k')
+        ax.plot(goal[0:1], goal[1:2], goal[2:3], 'ro', markersize=7, markeredgecolor='k')
         # adjust the aspect ratio
         ax.dist = 7
         set_axes_equal(ax)
@@ -417,9 +460,22 @@ class Quadrotor:
         self.w_range = [0, 2] # 0 to 2 radians/s control input can get
         self.c_range = [2, 18] # m/s^-2 limit of thrust in vertical direction
 
-        self.x_step_size = [0, 1] # space stepsize
-        self.v_step_size = [0, 2.5] # linear velocity change
+        self.x_step_size = 2 # space stepsize
+        self.v_step_size = 1.5 # linear velocity change
 
+        self.quaternion_diff_max = 0.1 # 1/10 between 1, 10
+        self.theta_step_size = 0.628 # rad, considering 2pi is maximal difference
+
+    def MotionModel(self, x, u):
+        '''return f(x,u) given x and u'''
+        state = [0]* 10
+        # p_dot = v
+        state[0:3] = x[7:10]
+        # q_dot = q * [0, w]
+        state[3:7] = 0.5 * q_mult(x[3:7], [0, u[0], u[1], u[2]])
+        # v_dot = g + R(q)v
+        state[7:10] = np.array([0,0,self.g]) + q_to_R(x[3:7]) @ np.array([0,0,u[3]])
+        return tuple(state)
 
     def linearized_A(self, x0, u0):
         # linearized A at a point
@@ -491,9 +547,9 @@ class Quadrotor:
         q = x[3:7]
         p = x[0:3]
         q = q / np.linalg.norm(q) # normalization
-        R = q_to_R(q)
-        # x, y, z = q_to_angles(q)
-        # R = R_matrix(z_angle = z, y_angle = y, x_angle = x)
+        # R = q_to_R(q)
+        x, y, z = q_to_angles(q)
+        R = R_matrix(z_angle = z, y_angle = y, x_angle = x)
         OBB = obb(P = p, E = (self.l, self.l, self.h), O = R)
         return OBB
 
@@ -502,19 +558,31 @@ class Quadrotor:
         for i in range(0,3):
             if pi[i] < self.w_range[0]: pi[i] = self.w_range[0]
             elif pi[i] > self.w_range[1]: pi[i] = self.w_range[1]
+
         if pi[3] < self.c_range[0]: pi[3] = self.c_range[0]
         elif pi[3] > self.c_range[1]: pi[3] = self.c_range[1]
         return pi
 
-    def state_restriction(self, diff):
-        # given x - x0, if this is too large, state transition is not true under linearized model.
-        for i in range(0,3):
-            if diff[i] < self.x_step_size[0]: diff[i] = self.x_step_size[0]
-            elif diff[i] > self.x_step_size[1]: diff[i] = self.x_step_size[1]
-        # TODO: implement the rotation step size
-        for i in range(7,10):
-            if diff[i] < self.v_step_size[0]: diff[i] = self.v_step_size[0]
-            elif diff[i] > self.v_step_size[1]: diff[i] = self.v_step_size[1]
+    def state_restriction(self, diff, q1, q2, slerp_t = 0.4):
+        '''given x - x0, if this is too large, state transition is not true under linearized model.'''
+        norm = np.sqrt( diff[0]**2 + diff[1]**2 + diff[2]**2 )
+        if  norm > self.x_step_size**2: 
+            diff[0] = self.x_step_size * diff[0] / norm
+            diff[1] = self.x_step_size * diff[1] / norm
+            diff[2] = self.x_step_size * diff[2] / norm
+        # Limit the change in velocity
+        norm2 = np.sqrt( diff[7]**2 + diff[8]**2 + diff[9]**2 )
+        if  norm2 > self.v_step_size**2: 
+            diff[7] = self.v_step_size * diff[7] / norm2
+            diff[8] = self.v_step_size * diff[8] / norm2
+            diff[9] = self.v_step_size * diff[9] / norm2
+        # implement the rotation slerp between two quaternions
+        # qold = q2
+        # theta1, w = q_to_axis_angle(qold)
+        # if theta1 < -self.theta_step_size: theta1 = -self.theta_step_size
+        # elif theta1 > self.theta_step_size: theta1 = self.theta_step_size
+        # diff[3:7] = axis_angle_to_q(theta1, w)
+        # diff[3:7] = q_slerp(q1, q2, slerp_t)
         return diff
 
 
@@ -565,8 +633,11 @@ class env:
         # get the distance between two states
         return np.sqrt((child[0] - x[0])**2 + (child[1] - x[1])**2 + (child[2] - x[2])**2)
 
-    def sampleFree(self):
+    def sampleFree(self, bias = 0.05):
         # x = (x,y,z,q0,q1,q2,q3,vx,vy,vz) in R10
+        i = np.random.uniform()
+        if i < bias:
+            return self.goal
         state = [0]*10
         q = self.sampleUnitQuaternion()
         x = self.sampleFreePos(R = q_to_R(q))
@@ -593,6 +664,7 @@ class env:
 
     def sampleFreePos(self, R):
         # given rotation matrix, construct an obb and see if obb is free of other obbs
+        goal = self.goal
         x = np.random.uniform(self.boundary[0:3], self.boundary[3:6])
         OBB = obb(P = x, E = [self.quad.l, self.quad.l, self.quad.h], O = R)
         for i in self.OBB:
@@ -603,10 +675,6 @@ class env:
     
 if __name__ == '__main__':
     Env = env()
-    q = Env.sampleUnitQuaternion()
-    R = q_to_R(q, homogeneous= False)
-    x, y, z = q_to_angles(q)
-    print((x,y,z))
-    R2 = np.linalg.inv(R_matrix(x_angle = x, y_angle = y, z_angle = z))
-    print(R) 
-    print(R2)
+    quad = Quadrotor()
+    q0 = (1,0,0,0)
+    print(q_mult(q0, [0,1,2,3]))
