@@ -29,7 +29,7 @@ class lqrrt:
         self.Parent = {}
         self.COST = {}
         self.STAGECOST = {}
-        self.gamma = 10e+5
+        self.gamma = 10e+10
         self.maxiter = n
 
         self.S_mat = {}
@@ -127,7 +127,7 @@ class lqrrt:
                 #         self.removewire(self.Parent[xnear], xnear)
                 #         self.wireup(xnear, xnew)
             self.ind += 1
-        self.reached()
+        # self.reached()
         visualization(self)
         plt.show()
         return self.V, self.E
@@ -228,7 +228,7 @@ class lqrrt:
             return False
         return True
     
-    def restrict_diff(self, diff, q1, q2, t = 0.1):
+    def restrict_diff(self, diff, q1, q2, t = 0.5):
         # restricting inputs for the difference between the states for linearized model
         # important: manully set the step size.
         return self.quad.state_restriction(diff, q1, q2, slerp_t=t)

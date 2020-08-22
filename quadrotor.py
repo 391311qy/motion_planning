@@ -582,7 +582,7 @@ class Quadrotor:
         # if theta1 < -self.theta_step_size: theta1 = -self.theta_step_size
         # elif theta1 > self.theta_step_size: theta1 = self.theta_step_size
         # diff[3:7] = axis_angle_to_q(theta1, w)
-        # diff[3:7] = q_slerp(q1, q2, slerp_t)
+        diff[3:7] = q_slerp(q1, q2, slerp_t)
         return diff
 
 
